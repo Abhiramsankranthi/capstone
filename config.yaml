@@ -1,0 +1,59 @@
+date_range:
+  start: "2000-01-01"
+  end: "2025-12-31"
+
+equity:
+  benchmark: "^GSPC"
+  sector_etfs:
+    - XLK
+    - XLF
+    - XLE
+    - XLV
+    - XLY
+    - XLP
+    - XLI
+    - XLB
+    - XLU
+    - XLRE
+    - XLC
+
+volatility:
+  tickers:
+    - "^VIX"
+    - "^VIX3M"
+
+fred:
+  series:
+    CPIAUCSL: "CPI All Urban Consumers"
+    UNRATE: "Unemployment Rate"
+    DFF: "Effective Federal Funds Rate"
+    INDPRO: "Industrial Production Index"
+    T10Y2Y: "10Y-2Y Treasury Spread"
+
+sentiment:
+  raw_dir: "data/raw"
+  finance_categories:
+    - BUSINESS
+    - MONEY
+  finbert_model: "ProsusAI/finbert"
+  batch_size: 16
+  max_seq_length: 128
+
+features:
+  rolling_windows: [5, 21]
+  rsi_period: 14
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  bollinger_period: 20
+  vix_percentile_window: 252
+
+hmm:
+  n_states_candidates: [2, 3, 4]
+  input_features: ["sp500_log_return", "sp500_realized_vol_21d"]
+  n_iter: 200
+  random_state: 42
+  n_fits: 10
+
+targets:
+  forward_returns: [1, 5]
