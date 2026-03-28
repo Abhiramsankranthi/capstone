@@ -38,9 +38,12 @@ def merge_all_features(config=None):
 
     if sentiment is not None:
         sent_aligned = sentiment.reindex(trading_days)
-        sent_aligned["sent_article_count"] = sent_aligned["sent_article_count"].fillna(0)
-        sent_aligned["sent_mean"] = sent_aligned["sent_mean"].ffill(limit=5)
-        sent_aligned["sent_max_neg"] = sent_aligned["sent_max_neg"].ffill(limit=5)
+        # Count column: fill missing with 0 (no articles that day)
+        if "sent_article_count" in sent_aligned.columns:
+            sent_aligned["sent_article_count"] = sent_aligned["sent_article_count"].fillna(0)
+        # All other sentiment columns: forward-fill up to 5 days
+        ffill_cols = [c for c in sent_aligned.columns if c != "sent_article_count"]
+        sent_aligned[ffill_cols] = sent_aligned[ffill_cols].ffill(limit=5)
         merged = merged.join(sent_aligned, how="left")
 
     # Forward return targets
