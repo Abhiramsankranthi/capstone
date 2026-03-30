@@ -169,8 +169,25 @@ def main():
             imp_path = out_dir / f"feature_importance_{key}.csv"
             imp.to_csv(imp_path, index=False)
             print(f"  Saved: {imp_path}")
+    # ── Save predictions for backtesting ─────────────────────────────────────
+    preds_dir = PROJECT_ROOT / "data" / "processed" / "predictions"
+    preds_dir.mkdir(parents=True, exist_ok=True)
 
-    print("\n=== Training Complete ===")
+    print("\nSaving model predictions...")
+    for key, val in all_results.items():
+        if "predictions" in val:
+            preds = val["predictions"]
+            path = preds_dir / f"{key}_preds.parquet"
+            preds.to_frame("prediction").to_parquet(path)
+            print(f"  Saved: {path}")
+
+    # ── Save actual returns (for backtesting alignment) ──────────────────────
+    actuals_path = PROJECT_ROOT / "data" / "processed" / "actual_returns.parquet"
+    features_df[["fwd_return_1d", "fwd_return_5d"]].to_parquet(actuals_path)
+    print(f"\nSaved actual returns: {actuals_path}")
+
+
+    print("\n=== Training Complete ===")   
 
 
 if __name__ == "__main__":
