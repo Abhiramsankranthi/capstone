@@ -57,3 +57,27 @@ hmm:
 
 targets:
   forward_returns: [1, 5]
+
+deep_learning:
+  seed: 42
+  device: "cpu"
+  sequence_length: 30
+  min_train_size: 756
+  step_size: 126
+  max_folds: null
+  val_fraction: 0.15
+  min_train_sequences: 200
+  batch_size: 64
+  max_epochs: 25
+  tuning_trials: 4
+  tuning_max_epochs: 10
+  patience: 4
+  learning_rate: 0.001
+  weight_decay: 0.00001
+  dropout: 0.2
+  lstm_hidden_size: 64
+  lstm_layers: 2
+  transformer_d_model: 64
+  transformer_heads: 4
+  transformer_layers: 2
+  models: ["lstm", "tft"]

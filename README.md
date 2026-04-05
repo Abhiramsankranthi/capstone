@@ -92,6 +92,19 @@ python3 scripts/02_build_features.py
 
 # Step 3: Fit HMM and validate regimes
 python3 scripts/03_fit_hmm.py
+
+# Step 4: Evaluate incremental sentiment value (feature importance)
+python3 scripts/04_evaluate_sentiment.py
+
+# Step 5: Train forecasting models (Ridge/Lasso, LightGBM, LSTM, TFT)
+# Add --quick for a fast smoke run
+python3 scripts/05_train_models.py --quick
+
+# Step 6: Portfolio backtest over saved prediction files
+python3 scripts/06_backtest.py
+
+# Step 7: Statistical significance testing
+python3 scripts/07_statistical_significance.py
 ```
 
 ### Output Files
@@ -105,6 +118,10 @@ python3 scripts/03_fit_hmm.py
 | `data/processed/features.parquet` | Final merged dataset (6,538 days x 37 features) |
 | `data/processed/regime_labels.parquet` | HMM regime labels per trading day |
 | `data/processed/regime_chart.png` | S&P 500 price chart shaded by regime |
+| `data/processed/model_metrics.csv` | RMSE / directional accuracy / Sharpe across all models |
+| `data/processed/predictions/*.parquet` | Walk-forward predictions for each model × target × regime mode |
+| `data/processed/backtest_results.csv` | Economic backtest summary (Sharpe, max drawdown, IC, turnover) |
+| `data/processed/significance_tests.csv` | Binomial + Sharpe significance summary |
 
 ## Project Structure
 
@@ -127,12 +144,19 @@ capstone/
 │   │   └── merge.py         # Join all sources + add forward return targets
 │   ├── models/
 │   │   └── hmm.py           # Gaussian HMM fitting, BIC selection, regime labeling
+│   │   ├── ridge_lasso.py   # Ridge/Lasso walk-forward models
+│   │   ├── lightgbm_model.py# LightGBM + Optuna tuning
+│   │   └── deep_learning.py # LSTM + Transformer(TFT-style) walk-forward models
 │   └── validation/
 │       └── regime_validation.py  # Crisis period checks + regime visualization
 ├── scripts/
 │   ├── 01_fetch_data.py     # Run all data downloads
 │   ├── 02_build_features.py # Run feature engineering + merge
-│   └── 03_fit_hmm.py        # Run HMM fitting + validation
+│   ├── 03_fit_hmm.py        # Run HMM fitting + validation
+│   ├── 04_evaluate_sentiment.py   # Sentiment feature value checks
+│   ├── 05_train_models.py   # Train all forecasting models + save predictions/metrics
+│   ├── 06_backtest.py       # Portfolio backtest on prediction files
+│   └── 07_statistical_significance.py # Statistical significance reporting
 ├── data/
 │   ├── raw/                 # Kaggle news JSONs (gitignored)
 │   ├── interim/             # Per-source parquet files (gitignored)
@@ -149,14 +173,13 @@ capstone/
 - 10 random restarts per state count to avoid local optima
 - Regimes labeled by volatility level (low vol = Bull, high vol = Bear/Crisis)
 
-### Planned: Forecasting Models
+### Forecasting Models (Implemented)
 - **Baselines**: Ridge regression, Lasso regression
-- **Tree-based**: LightGBM
-- **Deep learning**: LSTM, Temporal Fusion Transformer
+- **Tree-based**: LightGBM with Optuna tuning
+- **Deep learning**: LSTM and Transformer-based TFT-style regressor
 - Each trained in regime-agnostic and regime-conditioned variants
 - Expanding-window walk-forward backtesting
 - Evaluation: directional accuracy, Sharpe ratio, max drawdown, RMSE, information coefficient
-- Interpretability via SHAP analysis
 
 ## Timeline
 

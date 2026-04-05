@@ -7,7 +7,7 @@ Usage:
     python scripts/05_train_models.py [--quick]
 
 Options:
-    --quick   Use n_trials=10 for Optuna (faster, for smoke-testing)
+    --quick   Use n_trials=1 for Optuna + strict deep smoke settings
 """
 import sys
 from pathlib import Path
@@ -24,6 +24,7 @@ matplotlib.use("Agg")  # headless
 from src.config import load_config, PROJECT_ROOT
 from src.models.ridge_lasso import run_ridge_lasso
 from src.models.lightgbm_model import run_lightgbm
+from src.models.deep_learning import run_deep_models
 
 
 def build_metrics_table(all_results: dict) -> pd.DataFrame:
@@ -98,11 +99,52 @@ def plot_prediction_vs_actual(results: dict, features_df: pd.DataFrame, out_dir:
         print(f"  Saved: {fname}")
 
 
+def save_learning_curves(results: dict, out_dir: Path):
+    """
+    Save deep model training diagnostics:
+    - per-model learning curve csv/png
+    - per-model fold summary csv
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for key, val in results.items():
+        curve = val.get("learning_curve")
+        fold_summary = val.get("fold_summary")
+
+        if isinstance(fold_summary, pd.DataFrame) and not fold_summary.empty:
+            fold_path = out_dir / f"fold_summary_{key}.csv"
+            fold_summary.to_csv(fold_path, index=False)
+            print(f"  Saved: {fold_path}")
+
+        if not isinstance(curve, pd.DataFrame) or curve.empty:
+            continue
+
+        curve_path = out_dir / f"learning_curve_{key}.csv"
+        curve.to_csv(curve_path, index=False)
+        print(f"  Saved: {curve_path}")
+
+        # Plot mean train/val curve across folds by epoch
+        grouped = curve.groupby("epoch")[["train_loss", "val_loss"]].mean()
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.plot(grouped.index, grouped["train_loss"], label="Train Loss", color="royalblue")
+        ax.plot(grouped.index, grouped["val_loss"], label="Val Loss", color="tomato")
+        ax.set_title(f"Learning Curve — {key}")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("MSE Loss")
+        ax.legend()
+        ax.grid(alpha=0.2)
+        plt.tight_layout()
+        fig_path = out_dir / f"learning_curve_{key}.png"
+        fig.savefig(fig_path, dpi=130)
+        plt.close(fig)
+        print(f"  Saved: {fig_path}")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--quick", action="store_true", help="Use n_trials=10 for fast testing")
+    parser.add_argument("--quick", action="store_true", help="Use n_trials=1 + strict smoke settings")
+    parser.add_argument("--skip-deep", action="store_true", help="Skip LSTM/TFT deep models")
     args = parser.parse_args()
-    n_trials = 10 if args.quick else 50
+    n_trials = 1 if args.quick else 50
 
     config = load_config()
     features_df = pd.read_parquet(PROJECT_ROOT / "data" / "processed" / "features.parquet")
@@ -141,6 +183,32 @@ def main():
                                     n_optuna_trials=n_trials, config=config)
     all_results.update(lgb_conditioned)
 
+    # ── Deep Learning (LSTM / TFT) ────────────────────────────────────────────
+    if not args.skip_deep:
+        print("\n" + "="*60)
+        print("DEEP LEARNING (LSTM / TFT) — REGIME-AGNOSTIC")
+        print("="*60)
+        deep_agnostic = run_deep_models(
+            features_df=features_df,
+            regime_labels=regime_labels,
+            regime_conditioned=False,
+            config=config,
+            quick=args.quick,
+        )
+        all_results.update(deep_agnostic)
+
+        print("\n" + "="*60)
+        print("DEEP LEARNING (LSTM / TFT) — REGIME-CONDITIONED")
+        print("="*60)
+        deep_conditioned = run_deep_models(
+            features_df=features_df,
+            regime_labels=regime_labels,
+            regime_conditioned=True,
+            config=config,
+            quick=args.quick,
+        )
+        all_results.update(deep_conditioned)
+
     # ── Summary table ──────────────────────────────────────────────────────────
     print("\n" + "="*60)
     print("RESULTS SUMMARY")
@@ -161,6 +229,9 @@ def main():
 
     print("\nGenerating directional accuracy plots...")
     plot_prediction_vs_actual(all_results, features_df, charts_dir)
+
+    print("\nSaving deep-model learning curves...")
+    save_learning_curves(all_results, charts_dir)
 
     # Save feature importance tables
     for key, val in lgb_results.items():
