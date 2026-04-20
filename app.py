@@ -82,7 +82,7 @@ sp500_price = np.exp(sp500_returns.cumsum())   # normalized to 1.0 at start
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 st.sidebar.title("Controls")
 
-pages = ["Overview", "Regime Detection", "Markov Switching", "Model Performance", "Feature Importance", "SHAP Analysis", "Sentiment Analysis", "Backtest", "Live Prediction"]
+pages = ["Overview", "Regime Detection", "Markov Switching", "Model Performance", "Feature Importance", "SHAP Analysis", "Sentiment Analysis", "Backtest", "Live Trading"]
 page = st.sidebar.radio("Navigate", pages)
 
 # ── PAGE: Overview ────────────────────────────────────────────────────────────
@@ -535,81 +535,133 @@ elif page == "Backtest":
         sub = bd_df[bd_df["model"] == sel_model][["regime", "sharpe", "sortino", "max_dd", "ic", "hit_rate", "n"]]
         st.dataframe(sub, use_container_width=True, hide_index=True)
 
-# ── PAGE: Live Prediction ─────────────────────────────────────────────────────
-elif page == "Live Prediction":
-    st.title("Walk-Forward Predictions Explorer")
+# ── PAGE: Live Trading ────────────────────────────────────────────────────────
+elif page == "Live Trading":
+    st.title("Live Paper Trading — Alpaca")
+    st.caption("Regime-conditioned SPY strategy, updated daily after market close.")
 
-    if not all_preds:
-        st.warning("No prediction parquet files found. Run scripts/05_train_models.py first.")
+    TRADE_LOG = PROCESSED / "trade_log.csv"
+
+    # ── Setup instructions (shown when log is empty) ──────────────────────────
+    if not TRADE_LOG.exists():
+        st.info(
+            "No trade log yet. To start live paper trading:\n\n"
+            "1. Create a free account at [alpaca.markets](https://alpaca.markets) "
+            "and copy your **paper trading** API key + secret.\n"
+            "2. Add to `.env`:\n"
+            "```\nALPACA_API_KEY=your_key\nALPACA_SECRET_KEY=your_secret\n```\n"
+            "3. Install Alpaca SDK: `pip install alpaca-py`\n"
+            "4. Save the final models: `python scripts/11_save_models.py`\n"
+            "5. Run the daily script: `python scripts/12_live_trading.py`\n\n"
+            "Then schedule it with cron to run at 4:30 PM ET on weekdays."
+        )
+
+        # Still show historical signal simulation
+        st.subheader("Historical Signal Simulation (Walk-Forward)")
+        if all_preds:
+            model_key = st.selectbox("Model", sorted(all_preds.keys()))
+            preds = all_preds[model_key]
+            target = "fwd_return_1d" if "1d" in model_key else "fwd_return_5d"
+            actuals_path = PROCESSED / "actual_returns.parquet"
+            actual = pd.read_parquet(actuals_path)[target] if actuals_path.exists() else features_df[target]
+            common = preds.index.intersection(actual.index.dropna())
+            preds_a, actual_a = preds.loc[common], actual.loc[common].dropna()
+            c2 = preds_a.index.intersection(actual_a.index)
+
+            fig, axes = plt.subplots(1, 2, figsize=(13, 4))
+            ax = axes[0]
+            ax.scatter(actual_a.loc[c2], preds_a.loc[c2], alpha=0.2, s=6, color="steelblue")
+            lim = max(abs(actual_a.loc[c2]).quantile(0.99), abs(preds_a.loc[c2]).quantile(0.99))
+            ax.set_xlim(-lim, lim); ax.set_ylim(-lim, lim)
+            ax.axhline(0, color="gray", lw=0.6); ax.axvline(0, color="gray", lw=0.6)
+            ax.plot([-lim, lim], [-lim, lim], "r--", lw=0.8)
+            ax.set_xlabel("Actual"); ax.set_ylabel("Predicted"); ax.set_title("Predicted vs Actual")
+
+            ax2 = axes[1]
+            strat = (np.sign(preds_a.loc[c2]) * actual_a.loc[c2]).cumsum()
+            bh = actual_a.loc[c2].cumsum()
+            ax2.plot(strat.index, strat.values, color="royalblue", label="Signal Strategy")
+            ax2.plot(bh.index, bh.values, color="gray", lw=0.8, ls="--", label="Buy & Hold")
+            ax2.set_ylabel("Cumulative Log Return"); ax2.legend(fontsize=8); ax2.grid(alpha=0.2)
+            ax2.set_title("Signal Strategy vs Buy & Hold")
+            plt.tight_layout(); st.pyplot(fig); plt.close(fig)
         st.stop()
 
-    model_key = st.selectbox("Model", sorted(all_preds.keys()))
-    preds = all_preds[model_key]
+    # ── Live trade log exists — show dashboard ────────────────────────────────
+    log_df = pd.read_csv(TRADE_LOG, parse_dates=["date"])
+    log_df = log_df.sort_values("date")
 
-    target = "fwd_return_1d" if "1d" in model_key else "fwd_return_5d"
-    actuals_path = PROCESSED / "actual_returns.parquet"
-    if actuals_path.exists():
-        actual = pd.read_parquet(actuals_path)[target]
-    else:
-        actual = features_df[target]
+    latest = log_df.iloc[-1]
 
-    common = preds.index.intersection(actual.index)
-    preds_a = preds.loc[common]
-    actual_a = actual.loc[common].dropna()
-    common2 = preds_a.index.intersection(actual_a.index)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Current Regime", latest["regime"])
+    c2.metric("Last Signal", latest["signal"].upper())
+    c3.metric("Predicted Return", f"{latest['pred_return']:+.4f}")
+    c4.metric("Days Traded", str(len(log_df)))
 
-    st.metric("Test Samples", len(common2))
+    st.markdown("---")
 
-    # Scatter: predicted vs actual
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4))
+    # ── Alpaca account (live, if connected) ───────────────────────────────────
+    try:
+        from src.trading.alpaca_client import get_account, get_position, get_portfolio_history
+        acct = get_account()
+        pos  = get_position("SPY")
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Portfolio Equity", f"${acct['equity']:,.2f}",
+                    delta=f"${acct['pnl']:+,.2f} today")
+        col2.metric("Cash", f"${acct['cash']:,.2f}")
+        if pos:
+            col3.metric(f"SPY Position ({pos['side']})",
+                        f"{pos['qty']} shares",
+                        delta=f"${pos['unrealized_pl']:+,.2f}")
+        else:
+            col3.metric("SPY Position", "Flat")
+
+        # Portfolio equity curve from Alpaca
+        try:
+            hist = get_portfolio_history(period="3M")
+            fig, ax = plt.subplots(figsize=(12, 3))
+            ax.plot(hist.index, hist["equity"], color="royalblue", lw=1.2)
+            ax.set_ylabel("Portfolio Equity ($)")
+            ax.set_title("Alpaca Paper Portfolio — 3 Month")
+            ax.grid(alpha=0.2)
+            plt.tight_layout(); st.pyplot(fig); plt.close(fig)
+        except Exception:
+            pass
+
+    except Exception as e:
+        st.info(f"Alpaca not connected ({e}). Showing signal log only.")
+
+    # ── Signal history chart ──────────────────────────────────────────────────
+    st.subheader("Daily Signal History")
+    fig, axes = plt.subplots(2, 1, figsize=(13, 6), sharex=True)
 
     ax = axes[0]
-    ax.scatter(actual_a.loc[common2], preds_a.loc[common2], alpha=0.2, s=6, color="steelblue")
-    lim = max(abs(actual_a.loc[common2]).quantile(0.99), abs(preds_a.loc[common2]).quantile(0.99))
-    ax.set_xlim(-lim, lim)
-    ax.set_ylim(-lim, lim)
-    ax.axhline(0, color="gray", linewidth=0.6)
-    ax.axvline(0, color="gray", linewidth=0.6)
-    ax.plot([-lim, lim], [-lim, lim], color="red", linewidth=0.8, linestyle="--")
-    ax.set_xlabel("Actual Return")
+    colors = {"buy": "#2ecc71", "sell": "#e74c3c", "flat": "#95a5a6"}
+    for _, row in log_df.iterrows():
+        ax.axvline(row["date"], color=colors.get(row["signal"], "gray"), alpha=0.5, lw=1.5)
+    ax.plot(log_df["date"], log_df["pred_return"], color="steelblue", lw=1.2, marker="o", ms=4)
+    ax.axhline(0, color="black", lw=0.6)
     ax.set_ylabel("Predicted Return")
-    ax.set_title("Predicted vs Actual")
+    ax.set_title("Daily Model Signal (green=buy, red=sell, gray=flat)")
+    ax.grid(alpha=0.2)
 
-    # Cumulative signal-weighted returns
     ax2 = axes[1]
-    signal = np.sign(preds_a.loc[common2])
-    strat_returns = (signal * actual_a.loc[common2]).cumsum()
-    buy_hold = actual_a.loc[common2].cumsum()
-    ax2.plot(strat_returns.index, strat_returns.values, color="royalblue", label="Signal Strategy")
-    ax2.plot(buy_hold.index, buy_hold.values, color="gray", linewidth=0.8, linestyle="--", label="Buy & Hold")
-    ax2.set_ylabel("Cumulative Log Return")
-    ax2.set_title("Signal Strategy vs Buy & Hold")
-    ax2.legend(fontsize=8)
-    ax2.grid(alpha=0.2)
+    regime_c = {"Bull": "#2ecc71", "Normal": "#3498db", "Bear/Crisis": "#e74c3c", "Extreme": "#9b59b6"}
+    for _, row in log_df.iterrows():
+        ax2.bar(row["date"], 1, color=regime_c.get(row["regime"], "gray"), alpha=0.7, width=1)
+    ax2.set_ylabel("Regime"); ax2.set_yticks([])
+    ax2.set_title("Detected Regime per Day")
 
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
+    plt.tight_layout(); st.pyplot(fig); plt.close(fig)
 
-    # Regime-breakdown table
-    if "conditioned" in model_key:
-        st.subheader("Performance by Regime")
-        rows = []
-        for regime in ["Bull", "Normal", "Bear/Crisis", "Extreme"]:
-            idx = regime_labels[regime_labels == regime].index.intersection(common2)
-            if len(idx) < 20:
-                continue
-            y_t = actual_a.loc[idx].values
-            y_p = preds_a.loc[idx].values
-            valid = ~(np.isnan(y_t) | np.isnan(y_p))
-            if valid.sum() < 20:
-                continue
-            dir_acc = (np.sign(y_p[valid]) == np.sign(y_t[valid])).mean()
-            rows.append({
-                "Regime": regime,
-                "N": valid.sum(),
-                "Dir Acc": f"{dir_acc*100:.1f}%",
-                "RMSE": f"{np.sqrt(np.mean((y_p[valid]-y_t[valid])**2)):.5f}",
-            })
-        if rows:
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    # ── Trade log table ───────────────────────────────────────────────────────
+    st.subheader("Trade Log")
+    display_cols = ["date", "regime", "pred_return", "signal", "notional",
+                    "order_status", "vix", "sp500_return"]
+    show_cols = [c for c in display_cols if c in log_df.columns]
+    st.dataframe(
+        log_df[show_cols].sort_values("date", ascending=False).head(30),
+        use_container_width=True, hide_index=True,
+    )
