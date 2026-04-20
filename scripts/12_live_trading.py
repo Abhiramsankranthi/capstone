@@ -270,9 +270,13 @@ def main():
         # Open new position
         if side in ("buy", "sell"):
             price = float(yf.Ticker(SYMBOL).fast_info["last_price"])
-            qty = round(notional / price, 2)
-            order_result = submit_order(SYMBOL, qty, side, note=f"regime={regime} pred={pred:+.5f}")
-            print(f"  Order: {order_result}")
+            # Fractional shares only allowed for buys; shorts require whole shares
+            qty = round(notional / price, 2) if side == "buy" else int(notional / price)
+            if qty <= 0:
+                print("  Qty rounds to 0 — skipping order.")
+            else:
+                order_result = submit_order(SYMBOL, qty, side, note=f"regime={regime} pred={pred:+.5f}")
+                print(f"  Order: {order_result}")
         else:
             print("  No position taken (flat signal).")
 
