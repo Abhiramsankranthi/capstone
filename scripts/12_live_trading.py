@@ -224,15 +224,20 @@ def log_trade(record: dict):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--force", action="store_true", help="Override once-per-day guard")
+    args = parser.parse_args()
+
     today = date.today().isoformat()
     print(f"\n=== LIVE TRADING — {today} ===")
 
     # Guard: skip if already ran today
-    if TRADE_LOG.exists():
+    if not args.force and TRADE_LOG.exists():
         existing = pd.read_csv(TRADE_LOG)
         already_ran = existing["date"].astype(str).str.startswith(today)
         if already_ran.any():
-            print(f"  Already traded today ({today}). Exiting.")
+            print(f"  Already traded today ({today}). Use --force to override.")
             return
 
     # 1. Features

@@ -2,3 +2,4 @@ date,regime,pred_return,signal,notional,order_id,order_status,vix,sp500_return
 2026-04-20,Bear/Crisis,-0.002351,sell,6000.0,,"error: {""code"":42210000,""message"":""fractional orders cannot be sold short""}",18.8700008392334,-0.0023771959102520377
 2026-04-20,Bear/Crisis,-0.002351,sell,6000.0,cbc995a3-a3c6-4fcd-a9ee-d7fa1fb72749,OrderStatus.ACCEPTED,18.8700008392334,-0.0023771959102520377
 2026-04-20,Bear/Crisis,-0.002351,sell,6000.0,d20e9ba0-9286-4135-b321-c80d3a67ce24,OrderStatus.ACCEPTED,18.8700008392334,-0.0023771959102520377
+2026-04-20,Bear/Crisis,-0.002351,sell,6000.0,7403e942-4479-42f4-b085-691db0e895ab,OrderStatus.ACCEPTED,18.8700008392334,-0.0023771959102520377
