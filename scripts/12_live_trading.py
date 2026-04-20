@@ -227,6 +227,14 @@ def main():
     today = date.today().isoformat()
     print(f"\n=== LIVE TRADING — {today} ===")
 
+    # Guard: skip if already ran today
+    if TRADE_LOG.exists():
+        existing = pd.read_csv(TRADE_LOG)
+        already_ran = existing["date"].astype(str).str.startswith(today)
+        if already_ran.any():
+            print(f"  Already traded today ({today}). Exiting.")
+            return
+
     # 1. Features
     print("\n[1] Computing features...")
     features_df = fetch_latest_features()
