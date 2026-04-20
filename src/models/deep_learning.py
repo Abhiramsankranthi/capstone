@@ -672,7 +672,7 @@ def run_deep_models(
             regimes = regime_labels.reindex(base_df.index)
             if regimes.isna().all():
                 raise ValueError("Regime labels missing after merge (all NaN).")
-            reg_dummies = pd.get_dummies(regimes.astype("Int64"), prefix="regime", dummy_na=False)
+            reg_dummies = pd.get_dummies(regimes, prefix="regime", dummy_na=False)
             reg_dummies = reg_dummies.astype(float)
             reg_cols = reg_dummies.columns.tolist()
             base_df = base_df.join(reg_dummies, how="left")
@@ -725,7 +725,7 @@ def run_deep_models(
                     common_idx = yy.index.intersection(pp.index)
                     if len(common_idx) < 25:
                         continue
-                    regime_metrics[int(regime_val)] = _compute_metrics(
+                    regime_metrics[str(regime_val)] = _compute_metrics(
                         yy.loc[common_idx].values,
                         pp.loc[common_idx].values,
                     )

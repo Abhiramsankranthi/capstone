@@ -1,0 +1,135 @@
+
+Features: (6538, 40)  |  Regimes: {'Bull': 2613, 'Normal': 1822, 'Bear/Crisis': 1331, 'Extreme': 751}
+
+============================================================
+RIDGE / LASSO — REGIME-AGNOSTIC
+============================================================
+
+--- ridge_fwd_return_1d_regime_agnostic ---
+  Selected alpha=100.0
+  RMSE=0.01230  DirAcc=0.492  Sharpe=-0.037
+
+--- lasso_fwd_return_1d_regime_agnostic ---
+  Selected alpha=0.001
+  RMSE=0.01208  DirAcc=0.508  Sharpe=0.235
+
+--- ridge_fwd_return_5d_regime_agnostic ---
+  Selected alpha=100.0
+  RMSE=0.02640  DirAcc=0.503  Sharpe=0.113
+
+--- lasso_fwd_return_5d_regime_agnostic ---
+  Selected alpha=0.01
+  RMSE=0.02450  DirAcc=0.536  Sharpe=0.541
+
+============================================================
+RIDGE / LASSO — REGIME-CONDITIONED
+============================================================
+
+--- ridge_fwd_return_1d_regime_conditioned ---
+  [Bear/Crisis] alpha=100.0  RMSE=0.01407  DirAcc=0.502
+  [Extreme] alpha=100.0  RMSE=0.02737  DirAcc=0.505
+  [Normal] alpha=100.0  RMSE=0.00937  DirAcc=0.509
+  [Bull] alpha=100.0  RMSE=0.00668  DirAcc=0.517
+  Combined RMSE=0.01275  DirAcc=0.510  Sharpe=0.363
+
+--- lasso_fwd_return_1d_regime_conditioned ---
+  [Bear/Crisis] alpha=0.01  RMSE=0.01361  DirAcc=0.480
+  [Extreme] alpha=0.01  RMSE=0.02565  DirAcc=0.492
+  [Normal] alpha=0.01  RMSE=0.00917  DirAcc=0.499
+  [Bull] alpha=0.01  RMSE=0.00652  DirAcc=0.551
+  Combined RMSE=0.01218  DirAcc=0.516  Sharpe=0.105
+
+--- ridge_fwd_return_5d_regime_conditioned ---
+  [Bear/Crisis] alpha=100.0  RMSE=0.02974  DirAcc=0.512
+  [Extreme] alpha=100.0  RMSE=0.05498  DirAcc=0.513
+  [Normal] alpha=100.0  RMSE=0.02161  DirAcc=0.539
+  [Bull] alpha=100.0  RMSE=0.01535  DirAcc=0.516
+  Combined RMSE=0.02699  DirAcc=0.521  Sharpe=0.476
+
+--- lasso_fwd_return_5d_regime_conditioned ---
+  [Bear/Crisis] alpha=0.1  RMSE=0.02805  DirAcc=0.510
+  [Extreme] alpha=0.01  RMSE=0.04858  DirAcc=0.479
+  [Normal] alpha=0.01  RMSE=0.02074  DirAcc=0.525
+  [Bull] alpha=0.01  RMSE=0.01472  DirAcc=0.581
+  Combined RMSE=0.02490  DirAcc=0.540  Sharpe=0.342
+
+============================================================
+LIGHTGBM — REGIME-AGNOSTIC (n_trials=50)
+============================================================
+
+--- lgb_fwd_return_1d_regime_agnostic (n_trials=50) ---
+  RMSE=0.01215  DirAcc=0.507  Sharpe=0.123
+
+--- lgb_fwd_return_5d_regime_agnostic (n_trials=50) ---
+  RMSE=0.02461  DirAcc=0.512  Sharpe=-0.041
+
+============================================================
+LIGHTGBM — REGIME-CONDITIONED (n_trials=50)
+============================================================
+
+--- lgb_fwd_return_1d_regime_conditioned (n_trials=50) ---
+  Training on regime: Bear/Crisis (1327 obs)
+    RMSE=0.01381  DirAcc=0.489  Sharpe=0.068
+  Training on regime: Bull (2613 obs)
+    RMSE=0.00658  DirAcc=0.533  Sharpe=0.435
+  Training on regime: Extreme (751 obs)
+    RMSE=0.02588  DirAcc=0.498  Sharpe=-0.554
+  Training on regime: Normal (1822 obs)
+    RMSE=0.00927  DirAcc=0.494  Sharpe=0.254
+  Combined RMSE=0.01231  DirAcc=0.509  Sharpe=0.041
+
+--- lgb_fwd_return_5d_regime_conditioned (n_trials=50) ---
+  Training on regime: Bear/Crisis (1327 obs)
+    RMSE=0.02870  DirAcc=0.507  Sharpe=0.014
+  Training on regime: Bull (2613 obs)
+    RMSE=0.01499  DirAcc=0.551  Sharpe=1.105
+  Training on regime: Extreme (751 obs)
+    RMSE=0.05111  DirAcc=0.482  Sharpe=-0.690
+  Training on regime: Normal (1822 obs)
+    RMSE=0.02127  DirAcc=0.512  Sharpe=0.166
+  Combined RMSE=0.02576  DirAcc=0.524  Sharpe=0.169
+
+============================================================
+RESULTS SUMMARY
+============================================================
+                                 model     rmse  dir_acc  sharpe  n_test
+   lasso_fwd_return_1d_regime_agnostic 0.012080   0.5077  0.2350    6012
+lasso_fwd_return_1d_regime_conditioned 0.012184   0.5160  0.1049    6112
+   lasso_fwd_return_5d_regime_agnostic 0.024499   0.5356  0.5412    6008
+lasso_fwd_return_5d_regime_conditioned 0.024897   0.5403  0.3416    6108
+     lgb_fwd_return_1d_regime_agnostic 0.012146   0.5070  0.1230    6012
+  lgb_fwd_return_1d_regime_conditioned 0.012315   0.5095  0.0411    6112
+     lgb_fwd_return_5d_regime_agnostic 0.024611   0.5117 -0.0407    6008
+  lgb_fwd_return_5d_regime_conditioned 0.025761   0.5237  0.1688    6108
+   ridge_fwd_return_1d_regime_agnostic 0.012302   0.4923 -0.0373    6012
+ridge_fwd_return_1d_regime_conditioned 0.012752   0.5105  0.3633    6112
+   ridge_fwd_return_5d_regime_agnostic 0.026404   0.5032  0.1135    6008
+ridge_fwd_return_5d_regime_conditioned 0.026987   0.5214  0.4759    6108
+
+Metrics saved: /home/aseriousjam/capstone/data/processed/model_metrics.csv
+
+Generating feature importance plots...
+  Saved: /home/aseriousjam/capstone/data/processed/feature_importance_lgb_fwd_return_1d_regime_agnostic.png
+  Saved: /home/aseriousjam/capstone/data/processed/feature_importance_lgb_fwd_return_5d_regime_agnostic.png
+  Saved: /home/aseriousjam/capstone/data/processed/feature_importance_lgb_fwd_return_1d_regime_conditioned.png
+  Saved: /home/aseriousjam/capstone/data/processed/feature_importance_lgb_fwd_return_5d_regime_conditioned.png
+
+Generating directional accuracy plots...
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_ridge_fwd_return_1d_regime_agnostic.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_lasso_fwd_return_1d_regime_agnostic.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_ridge_fwd_return_5d_regime_agnostic.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_lasso_fwd_return_5d_regime_agnostic.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_ridge_fwd_return_1d_regime_conditioned.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_lasso_fwd_return_1d_regime_conditioned.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_ridge_fwd_return_5d_regime_conditioned.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_lasso_fwd_return_5d_regime_conditioned.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_lgb_fwd_return_1d_regime_agnostic.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_lgb_fwd_return_5d_regime_agnostic.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_lgb_fwd_return_1d_regime_conditioned.png
+  Saved: /home/aseriousjam/capstone/data/processed/rolling_dir_acc_lgb_fwd_return_5d_regime_conditioned.png
+  Saved: /home/aseriousjam/capstone/data/processed/feature_importance_lgb_fwd_return_1d_regime_agnostic.csv
+  Saved: /home/aseriousjam/capstone/data/processed/feature_importance_lgb_fwd_return_5d_regime_agnostic.csv
+  Saved: /home/aseriousjam/capstone/data/processed/feature_importance_lgb_fwd_return_1d_regime_conditioned.csv
+  Saved: /home/aseriousjam/capstone/data/processed/feature_importance_lgb_fwd_return_5d_regime_conditioned.csv
+
+=== Training Complete ===

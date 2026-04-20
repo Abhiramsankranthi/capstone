@@ -1,0 +1,5 @@
+rmse,dir_acc,sharpe,ic,n,label,target
+0.012945,0.485,0.0172,0.0127,5445,Without Sentiment,fwd_return_1d
+0.012915,0.4869,0.0301,0.0148,5445,With Sentiment,fwd_return_1d
+0.027439,0.4721,-0.1684,0.0369,5440,Without Sentiment,fwd_return_5d
+0.027736,0.4596,-0.3905,0.0221,5440,With Sentiment,fwd_return_5d

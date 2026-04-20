@@ -60,7 +60,7 @@ targets:
 
 deep_learning:
   seed: 42
-  device: "cpu"
+  device: "cuda"
   sequence_length: 30
   min_train_size: 756
   step_size: 126

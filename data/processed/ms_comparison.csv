@@ -1,0 +1,2 @@
+model,ari_vs_hmm,n_common,overlap_Bull,overlap_Normal,overlap_Bear/Crisis,overlap_Extreme,aic,bic,loglik
+MarkovSwitching_AR1,0.3712,6517,0.777,0.675,0.667,0.246,-42487.56,-42345.07,21264.78

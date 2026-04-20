@@ -3,8 +3,9 @@ __pycache__/
 *.pyc
 .venv/
 data/interim/
-data/processed/
 data/raw/
+# Keep processed outputs (needed for Streamlit Cloud deployment)
+data/processed/sentiment_importance.png
 *.egg-info/
 .ipynb_checkpoints/
 *:Zone.Identifier
