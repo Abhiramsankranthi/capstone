@@ -165,48 +165,39 @@ def detect_regime(features_today: pd.Series) -> str:
     return label_map.get(state, "Normal")
 
 
-# ── Prediction ───────────────────────────────────────────────────────────────
+# ── Prediction (ensemble across all saved models) ─────────────────────────────
 
 def predict_return(features_today: pd.Series, regime: str) -> float:
-    """Load saved LightGBM and predict 1-day return."""
-    model_path = MODELS_DIR / "lgb_fwd_return_1d_regime_conditioned.pkl"
-    if not model_path.exists():
-        print("  WARNING: saved model not found. Run scripts/11_save_models.py first.")
-        return 0.0
+    """Backwards-compat: return ensemble's weighted-average prediction."""
+    return ensemble_forecast(features_today, regime)["pred"]
 
-    bundle  = joblib.load(model_path)
-    model   = bundle["model"]
-    imputer = bundle["imputer"]
-    feat_cols    = bundle["feat_cols"]
-    regime_cols  = bundle["regime_cols"]
 
-    # Build regime one-hot
-    row = {}
-    for col in feat_cols:
-        if col in regime_cols:
-            row[col] = 1.0 if col == f"regime_{regime}" else 0.0
-        else:
-            row[col] = features_today.get(col, np.nan)
-
-    X = pd.DataFrame([row])[feat_cols]
-    X_imp = imputer.transform(X)
-    return float(model.predict(X_imp)[0])
+def ensemble_forecast(features_today: pd.Series, regime: str) -> dict:
+    """Run full ensemble; returns pred + agreement + per-model votes."""
+    from src.trading.ensemble import ensemble_predict
+    return ensemble_predict(features_today, regime, threshold=THRESHOLD)
 
 
 # ── Position sizing ───────────────────────────────────────────────────────────
 
-def compute_target_position(pred: float, regime: str) -> tuple[str, float]:
+def compute_target_position(pred: float, regime: str,
+                            signal_override: str | None = None) -> tuple[str, float]:
     """
     Returns (side, notional_dollars).
-    side: 'buy', 'sell', or 'flat'
+    If signal_override is provided (from ensemble), it wins over threshold test.
     """
     scale = REGIME_SCALE.get(regime, 0.7)
     scaled_notional = NOTIONAL * scale
 
+    if signal_override is not None:
+        if signal_override in ("buy", "sell"):
+            return signal_override, scaled_notional
+        return "flat", 0.0
+
     if pred > THRESHOLD:
         return "buy", scaled_notional
     elif pred < -THRESHOLD:
-        return "sell", scaled_notional  # short SPY
+        return "sell", scaled_notional
     else:
         return "flat", 0.0
 
@@ -252,13 +243,34 @@ def main():
     regime = detect_regime(features_today)
     print(f"  Current regime: {regime}")
 
-    # 3. Prediction
-    print("\n[3] Predicting 1-day return...")
-    pred = predict_return(features_today, regime)
-    print(f"  Predicted return: {pred:+.5f}")
+    # 3. Ensemble prediction
+    print("\n[3] Running model ensemble...")
+    ens = ensemble_forecast(features_today, regime)
+    pred = ens["pred"]
+    print(f"  Weighted prediction: {pred:+.5f}  "
+          f"Agreement: {ens['agreement']:.0%}  "
+          f"Active models: {ens['n_active']}/{ens['n_models']}")
+    for v in sorted(ens["votes"], key=lambda x: -x["sharpe"]):
+        flag = "OUT" if v["sharpe"] <= 0 else f"w={v['weight']:.2f}"
+        print(f"    {v['model_key']:48s} sharpe={v['sharpe']:+.3f}  "
+              f"pred={v['pred']:+.5f}  vote={v['vote']:4s}  {flag}")
 
-    # 4. Position sizing
-    side, notional = compute_target_position(pred, regime)
+    # Persist full consensus for the dashboard
+    import json as _json
+    consensus_path = PROCESSED / "latest_consensus.json"
+    consensus_path.write_text(_json.dumps({
+        "date":      today,
+        "regime":    regime,
+        "pred":      ens["pred"],
+        "signal":    ens["signal"],
+        "agreement": ens["agreement"],
+        "n_active":  ens["n_active"],
+        "votes":     ens["votes"],
+    }, indent=2, default=float))
+
+    # 4. Position sizing (use ensemble's gated signal, not bare threshold)
+    side, notional = compute_target_position(pred, regime,
+                                             signal_override=ens["signal"])
     # Map signal to target symbol: bullish → SPY, bearish → SH (inverse ETF, always buy)
     target_symbol = SYMBOL_LONG if side == "buy" else (SYMBOL_SHORT if side == "sell" else None)
     print(f"\n[4] Target position: {side.upper()} "
@@ -314,7 +326,11 @@ def main():
         print(f"  Alpaca error: {e}")
         order_result = {"status": f"error: {e}", "order_id": None}
 
-    # 6. Log
+    # 6. Log (add ensemble stats)
+    record_extra = {
+        "agreement":      round(ens["agreement"], 3),
+        "n_active_models": ens["n_active"],
+    }
     record = {
         "date":       today,
         "regime":     regime,
@@ -326,6 +342,7 @@ def main():
         "order_status": order_result.get("status"),
         "vix":        float(features_today.get("VIX", np.nan)),
         "sp500_return": float(features_today.get("sp500_log_return", np.nan)),
+        **record_extra,
     }
     log_trade(record)
 

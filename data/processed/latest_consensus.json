@@ -1,0 +1,94 @@
+{
+  "date": "2026-04-21",
+  "regime": "Bear/Crisis",
+  "pred": -0.007312429055487171,
+  "signal": "flat",
+  "agreement": 0.5,
+  "n_active": 4,
+  "votes": [
+    {
+      "model_key": "lasso_fwd_return_1d_regime_agnostic",
+      "sharpe": -0.3544,
+      "pred": 0.00035638205497159626,
+      "vote": "flat",
+      "weight": 0.0
+    },
+    {
+      "model_key": "lasso_fwd_return_1d_regime_conditioned",
+      "sharpe": -0.0636,
+      "pred": 0.00035638205497159626,
+      "vote": "flat",
+      "weight": 0.0
+    },
+    {
+      "model_key": "lasso_fwd_return_5d_regime_agnostic",
+      "sharpe": 0.3557,
+      "pred": 0.001725987144634389,
+      "vote": "buy",
+      "weight": 0.4275754297391513
+    },
+    {
+      "model_key": "lasso_fwd_return_5d_regime_conditioned",
+      "sharpe": 0.019,
+      "pred": 0.0017259871446343893,
+      "vote": "buy",
+      "weight": 0.022839283567736506
+    },
+    {
+      "model_key": "lgb_fwd_return_1d_regime_agnostic",
+      "sharpe": -0.2561,
+      "pred": -0.0009197651089720958,
+      "vote": "sell",
+      "weight": 0.0
+    },
+    {
+      "model_key": "lgb_fwd_return_1d_regime_conditioned",
+      "sharpe": -0.5124,
+      "pred": -0.0023863151306376673,
+      "vote": "sell",
+      "weight": 0.0
+    },
+    {
+      "model_key": "lgb_fwd_return_5d_regime_agnostic",
+      "sharpe": -0.3621,
+      "pred": -0.016342292472133476,
+      "vote": "sell",
+      "weight": 0.0
+    },
+    {
+      "model_key": "lgb_fwd_return_5d_regime_conditioned",
+      "sharpe": 0.1414,
+      "pred": -0.014318858316518664,
+      "vote": "sell",
+      "weight": 0.16997235244620745
+    },
+    {
+      "model_key": "ridge_fwd_return_1d_regime_agnostic",
+      "sharpe": -0.8685,
+      "pred": -0.003494595091738148,
+      "vote": "sell",
+      "weight": 0.0
+    },
+    {
+      "model_key": "ridge_fwd_return_1d_regime_conditioned",
+      "sharpe": -0.6165,
+      "pred": -0.004251000996616687,
+      "vote": "sell",
+      "weight": 0.0
+    },
+    {
+      "model_key": "ridge_fwd_return_5d_regime_agnostic",
+      "sharpe": -0.2361,
+      "pred": -0.012167537898172664,
+      "vote": "sell",
+      "weight": 0.0
+    },
+    {
+      "model_key": "ridge_fwd_return_5d_regime_conditioned",
+      "sharpe": 0.3158,
+      "pred": -0.01489946342114802,
+      "vote": "sell",
+      "weight": 0.3796129342469047
+    }
+  ]
+}

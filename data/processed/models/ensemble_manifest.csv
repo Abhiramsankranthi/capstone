@@ -1,0 +1,13 @@
+model,sharpe,n_train
+ridge_fwd_return_1d_regime_agnostic,-0.8685,6537
+ridge_fwd_return_1d_regime_conditioned,-0.6165,6537
+ridge_fwd_return_5d_regime_agnostic,-0.2361,6533
+ridge_fwd_return_5d_regime_conditioned,0.3158,6533
+lasso_fwd_return_1d_regime_agnostic,-0.3544,6537
+lasso_fwd_return_1d_regime_conditioned,-0.0636,6537
+lasso_fwd_return_5d_regime_agnostic,0.3557,6533
+lasso_fwd_return_5d_regime_conditioned,0.019,6533
+lgb_fwd_return_1d_regime_agnostic,-0.2561,6537
+lgb_fwd_return_1d_regime_conditioned,-0.5124,6537
+lgb_fwd_return_5d_regime_agnostic,-0.3621,6533
+lgb_fwd_return_5d_regime_conditioned,0.1414,6533

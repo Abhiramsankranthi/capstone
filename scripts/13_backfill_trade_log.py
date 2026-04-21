@@ -7,7 +7,7 @@ Usage:
     source .venv/bin/activate
     python scripts/13_backfill_trade_log.py --days 60
 """
-import sys, argparse, uuid, importlib.util
+import sys, argparse, uuid, importlib.util, json
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -42,10 +42,15 @@ def main():
     features_df = features_df.tail(args.days + 5)
 
     records = []
+    last_ens = None
+    last_regime = None
+    last_date = None
     for dt, row in features_df.iterrows():
         regime = live.detect_regime(row)
-        pred = live.predict_return(row, regime)
-        side, notional = live.compute_target_position(pred, regime)
+        ens = live.ensemble_forecast(row, regime)
+        pred = ens["pred"]
+        side, notional = live.compute_target_position(pred, regime,
+                                                     signal_override=ens["signal"])
 
         records.append({
             "date": dt.date().isoformat(),
@@ -57,7 +62,24 @@ def main():
             "order_status": "OrderStatus.FILLED" if side != "flat" else "flat",
             "vix": float(row.get("VIX", np.nan)),
             "sp500_return": float(row.get("sp500_log_return", np.nan)),
+            "agreement": round(ens["agreement"], 3),
+            "n_active_models": ens["n_active"],
         })
+        last_ens, last_regime, last_date = ens, regime, dt.date().isoformat()
+
+    # Persist most-recent consensus so the dashboard can render it
+    if last_ens is not None:
+        consensus_path = PROCESSED / "latest_consensus.json"
+        consensus_path.write_text(json.dumps({
+            "date":      last_date,
+            "regime":    last_regime,
+            "pred":      last_ens["pred"],
+            "signal":    last_ens["signal"],
+            "agreement": last_ens["agreement"],
+            "n_active":  last_ens["n_active"],
+            "votes":     last_ens["votes"],
+        }, indent=2, default=float))
+        print(f"  consensus JSON -> {consensus_path}")
 
     new_df = pd.DataFrame(records).tail(args.days)
 

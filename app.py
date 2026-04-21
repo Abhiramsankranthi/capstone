@@ -592,21 +592,53 @@ elif page == "Live Trading":
     log_df = log_df.sort_values("date")
     latest = log_df.iloc[-1]
 
-    # ── 1. PREDICTED STATUS (what the model says) ─────────────────────────────
-    st.subheader("Predicted Status — Model Signal")
-    signal_emoji = {"buy": "BUY SPY", "sell": "BUY SH (inverse)", "flat": "FLAT"}
+    # ── 1. PREDICTED STATUS (ensemble consensus) ──────────────────────────────
+    st.subheader("Predicted Status — Ensemble Model Consensus")
+    signal_emoji = {"buy": "BUY SPY", "sell": "BUY SH (inverse)", "flat": "FLAT (no trade)"}
     signal_label = signal_emoji.get(latest["signal"], latest["signal"].upper())
+
+    import json
+    consensus_path = PROCESSED / "latest_consensus.json"
+    consensus = None
+    if consensus_path.exists():
+        try:
+            consensus = json.loads(consensus_path.read_text())
+        except Exception:
+            consensus = None
 
     p1, p2, p3, p4 = st.columns(4)
     p1.metric("Signal Date", pd.to_datetime(latest["date"]).strftime("%Y-%m-%d"))
     p2.metric("Detected Regime", latest["regime"])
-    p3.metric("Predicted Return", f"{latest['pred_return']:+.4%}")
-    p4.metric("Action", signal_label)
+    p3.metric("Ensemble Prediction", f"{latest['pred_return']:+.4%}")
+    p4.metric("Final Signal", signal_label)
 
-    st.caption(
-        f"Model expects S&P 500 to move **{latest['pred_return']:+.2%}** on next open. "
-        f"In {latest['regime']} regime, notional scaled to ${latest['notional']:,.0f}."
-    )
+    if consensus:
+        agree = consensus["agreement"]
+        n_act = consensus["n_active"]
+        n_all = len(consensus["votes"])
+        st.caption(
+            f"**{n_act} of {n_all} models** active (positive-Sharpe gate). "
+            f"**Directional agreement: {agree:.0%}** — "
+            + ("trade gate PASSED ≥60%" if agree >= 0.6
+               else "trade gate BLOCKED <60% → FLAT")
+        )
+
+        votes_df = pd.DataFrame(consensus["votes"])
+        votes_df["included"] = votes_df["sharpe"].apply(lambda s: "Yes" if s > 0 else "Excluded")
+        votes_df["weight"]   = votes_df["weight"].apply(lambda w: f"{w*100:.0f}%")
+        votes_df["sharpe"]   = votes_df["sharpe"].apply(lambda s: f"{s:+.3f}")
+        votes_df["pred"]     = votes_df["pred"].apply(lambda p: f"{p:+.5f}")
+        votes_df = votes_df.rename(columns={
+            "model_key": "Model", "sharpe": "Backtest Sharpe",
+            "pred": "Prediction", "vote": "Vote",
+            "weight": "Weight", "included": "In Ensemble"
+        })[["Model", "Backtest Sharpe", "Prediction", "Vote", "Weight", "In Ensemble"]]
+        st.dataframe(votes_df, use_container_width=True, hide_index=True)
+    else:
+        st.caption(
+            f"Model expects S&P 500 to move **{latest['pred_return']:+.2%}** on next open. "
+            f"In {latest['regime']} regime, notional scaled to ${latest['notional']:,.0f}."
+        )
 
     st.markdown("---")
 
