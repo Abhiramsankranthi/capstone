@@ -77,6 +77,26 @@ def close_position(symbol: str = "SPY") -> dict | None:
         return None
 
 
+def list_recent_orders(limit: int = 10) -> pd.DataFrame:
+    """Return recent orders as DataFrame for dashboard display."""
+    from alpaca.trading.requests import GetOrdersRequest
+    from alpaca.trading.enums import QueryOrderStatus
+    req = GetOrdersRequest(status=QueryOrderStatus.ALL, limit=limit)
+    orders = _client().get_orders(req)
+    rows = []
+    for o in orders:
+        rows.append({
+            "submitted":   pd.to_datetime(o.submitted_at).tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M"),
+            "symbol":      o.symbol,
+            "side":        o.side.value,
+            "qty":         float(o.qty) if o.qty else 0.0,
+            "filled_qty":  float(o.filled_qty) if o.filled_qty else 0.0,
+            "avg_fill":    float(o.filled_avg_price) if o.filled_avg_price else None,
+            "status":      str(o.status.value) if hasattr(o.status, "value") else str(o.status),
+        })
+    return pd.DataFrame(rows)
+
+
 def get_portfolio_history(period: str = "1M") -> pd.DataFrame:
     """Return daily equity history as DataFrame."""
     from alpaca.trading.requests import GetPortfolioHistoryRequest

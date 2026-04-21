@@ -37,7 +37,8 @@ load_dotenv()
 PROCESSED   = PROJECT_ROOT / "data" / "processed"
 MODELS_DIR  = PROCESSED / "models"
 TRADE_LOG   = PROCESSED / "trade_log.csv"
-SYMBOL      = "SPY"
+SYMBOL_LONG  = "SPY"          # bullish exposure
+SYMBOL_SHORT = "SH"           # ProShares Short S&P 500 — inverse ETF (avoids short-sell locate delay)
 NOTIONAL    = 10_000          # dollars per trade (paper)
 THRESHOLD   = 0.0005          # min predicted return to act
 REGIME_SCALE = {
@@ -258,7 +259,10 @@ def main():
 
     # 4. Position sizing
     side, notional = compute_target_position(pred, regime)
-    print(f"\n[4] Target position: {side.upper()} ${notional:,.0f} of {SYMBOL}")
+    # Map signal to target symbol: bullish → SPY, bearish → SH (inverse ETF, always buy)
+    target_symbol = SYMBOL_LONG if side == "buy" else (SYMBOL_SHORT if side == "sell" else None)
+    print(f"\n[4] Target position: {side.upper()} "
+          f"${notional:,.0f} of {target_symbol or 'nothing'}")
 
     # 5. Submit order via Alpaca
     print("\n[5] Submitting order...")
@@ -271,24 +275,34 @@ def main():
         acct = get_account()
         print(f"  Account equity: ${acct['equity']:,.2f}  Cash: ${acct['cash']:,.2f}")
 
-        current_pos = get_position(SYMBOL)
-        current_side = current_pos["side"] if current_pos else "flat"
-        print(f"  Current position: {current_side}")
+        pos_spy = get_position(SYMBOL_LONG)
+        pos_sh  = get_position(SYMBOL_SHORT)
+        print(f"  Current SPY: {pos_spy['side'] if pos_spy else 'flat'}   "
+              f"SH: {pos_sh['side'] if pos_sh else 'flat'}")
 
-        # Close existing if opposite or going flat
-        if current_pos and (side == "flat" or current_side != side):
-            close_result = close_position(SYMBOL)
-            print(f"  Closed existing position: {close_result}")
+        # Close any position on the OPPOSITE symbol when switching direction / going flat
+        other_symbol = None
+        if side == "buy":   other_symbol = SYMBOL_SHORT   # dump SH when going long SPY
+        elif side == "sell": other_symbol = SYMBOL_LONG    # dump SPY when going bearish
+        if other_symbol and get_position(other_symbol):
+            close_result = close_position(other_symbol)
+            print(f"  Closed {other_symbol}: {close_result}")
+        if side == "flat":
+            for sym in (SYMBOL_LONG, SYMBOL_SHORT):
+                if get_position(sym):
+                    print(f"  Closed {sym}: {close_position(sym)}")
 
-        # Open new position
-        if side in ("buy", "sell"):
-            price = float(yf.Ticker(SYMBOL).fast_info["last_price"])
-            # Fractional shares only allowed for buys; shorts require whole shares
-            qty = round(notional / price, 2) if side == "buy" else int(notional / price)
+        # Open new position — always a BUY (long SPY or long SH)
+        if target_symbol:
+            price = float(yf.Ticker(target_symbol).fast_info["last_price"])
+            qty = round(notional / price, 2)  # fractional shares OK for buys
             if qty <= 0:
                 print("  Qty rounds to 0 — skipping order.")
             else:
-                order_result = submit_order(SYMBOL, qty, side, note=f"regime={regime} pred={pred:+.5f}")
+                order_result = submit_order(
+                    target_symbol, qty, "buy",
+                    note=f"regime={regime} pred={pred:+.5f} signal={side}"
+                )
                 print(f"  Order: {order_result}")
         else:
             print("  No position taken (flat signal).")
@@ -306,6 +320,7 @@ def main():
         "regime":     regime,
         "pred_return": round(pred, 6),
         "signal":     side,
+        "symbol":     target_symbol or "",
         "notional":   notional,
         "order_id":   order_result.get("order_id"),
         "order_status": order_result.get("status"),

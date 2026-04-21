@@ -588,37 +588,68 @@ elif page == "Live Trading":
         st.stop()
 
     # ── Live trade log exists — show dashboard ────────────────────────────────
-    log_df = pd.read_csv(TRADE_LOG, parse_dates=["date"])
+    log_df = pd.read_csv(TRADE_LOG, parse_dates=["date"], engine="python", on_bad_lines="skip")
     log_df = log_df.sort_values("date")
-
     latest = log_df.iloc[-1]
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Current Regime", latest["regime"])
-    c2.metric("Last Signal", latest["signal"].upper())
-    c3.metric("Predicted Return", f"{latest['pred_return']:+.4f}")
-    c4.metric("Days Traded", str(len(log_df)))
+    # ── 1. PREDICTED STATUS (what the model says) ─────────────────────────────
+    st.subheader("Predicted Status — Model Signal")
+    signal_emoji = {"buy": "BUY SPY", "sell": "BUY SH (inverse)", "flat": "FLAT"}
+    signal_label = signal_emoji.get(latest["signal"], latest["signal"].upper())
+
+    p1, p2, p3, p4 = st.columns(4)
+    p1.metric("Signal Date", pd.to_datetime(latest["date"]).strftime("%Y-%m-%d"))
+    p2.metric("Detected Regime", latest["regime"])
+    p3.metric("Predicted Return", f"{latest['pred_return']:+.4%}")
+    p4.metric("Action", signal_label)
+
+    st.caption(
+        f"Model expects S&P 500 to move **{latest['pred_return']:+.2%}** on next open. "
+        f"In {latest['regime']} regime, notional scaled to ${latest['notional']:,.0f}."
+    )
 
     st.markdown("---")
 
-    # ── Alpaca account (live, if connected) ───────────────────────────────────
+    # ── 2. CURRENT STATUS (what Alpaca actually shows) ────────────────────────
+    st.subheader("Current Status — Alpaca Paper Account")
     try:
-        from src.trading.alpaca_client import get_account, get_position, get_portfolio_history
+        from src.trading.alpaca_client import (
+            get_account, get_position, get_portfolio_history, list_recent_orders
+        )
         acct = get_account()
-        pos  = get_position("SPY")
+        pos_spy = get_position("SPY")
+        pos_sh  = get_position("SH")
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         col1.metric("Portfolio Equity", f"${acct['equity']:,.2f}",
                     delta=f"${acct['pnl']:+,.2f} today")
         col2.metric("Cash", f"${acct['cash']:,.2f}")
-        if pos:
-            col3.metric(f"SPY Position ({pos['side']})",
-                        f"{pos['qty']} shares",
-                        delta=f"${pos['unrealized_pl']:+,.2f}")
-        else:
-            col3.metric("SPY Position", "Flat")
 
-        # Portfolio equity curve from Alpaca
+        # Show whichever side is active
+        if pos_spy:
+            col3.metric("SPY (long)", f"{pos_spy['qty']:.2f} sh",
+                        delta=f"${pos_spy['unrealized_pl']:+,.2f}")
+        else:
+            col3.metric("SPY (long)", "Flat")
+
+        if pos_sh:
+            col4.metric("SH (short-proxy)", f"{pos_sh['qty']:.2f} sh",
+                        delta=f"${pos_sh['unrealized_pl']:+,.2f}")
+        else:
+            col4.metric("SH (short-proxy)", "Flat")
+
+        # Recent orders table — shows fill status
+        st.markdown("**Recent Orders**")
+        try:
+            orders = list_recent_orders(limit=10)
+            if len(orders):
+                st.dataframe(orders, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No orders yet.")
+        except Exception as e:
+            st.caption(f"Could not fetch orders: {e}")
+
+        # Portfolio equity curve
         try:
             hist = get_portfolio_history(period="3M")
             fig, ax = plt.subplots(figsize=(12, 3))
@@ -632,6 +663,21 @@ elif page == "Live Trading":
 
     except Exception as e:
         st.info(f"Alpaca not connected ({e}). Showing signal log only.")
+
+    st.markdown("---")
+
+    # ── 3. STRATEGY PERFORMANCE SUMMARY ───────────────────────────────────────
+    log_df["pnl_log"] = np.where(log_df["signal"]=="buy", log_df["sp500_return"],
+                         np.where(log_df["signal"]=="sell", -log_df["sp500_return"], 0.0))
+    strat_cum = (1 + log_df["pnl_log"]).prod() - 1
+    bh_cum    = (1 + log_df["sp500_return"]).prod() - 1
+    win_rate  = (log_df["pnl_log"] > 0).mean()
+
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric("Days Logged", str(len(log_df)))
+    s2.metric("Strategy Return", f"{strat_cum:+.2%}")
+    s3.metric("Buy-and-Hold", f"{bh_cum:+.2%}")
+    s4.metric("Win Rate", f"{win_rate:.0%}")
 
     # ── Signal history chart ──────────────────────────────────────────────────
     st.subheader("Daily Signal History")
