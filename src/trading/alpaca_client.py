@@ -86,7 +86,7 @@ def list_recent_orders(limit: int = 10) -> pd.DataFrame:
     rows = []
     for o in orders:
         rows.append({
-            "submitted":   pd.to_datetime(o.submitted_at).tz_convert("US/Eastern").strftime("%Y-%m-%d %H:%M"),
+            "submitted":   pd.to_datetime(o.submitted_at).tz_convert("America/New_York").strftime("%Y-%m-%d %H:%M"),
             "symbol":      o.symbol,
             "side":        o.side.value,
             "qty":         float(o.qty) if o.qty else 0.0,
@@ -103,7 +103,7 @@ def get_portfolio_history(period: str = "1M") -> pd.DataFrame:
     req = GetPortfolioHistoryRequest(period=period, timeframe="1D")
     hist = _client().get_portfolio_history(req)
     df = pd.DataFrame({
-        "timestamp": pd.to_datetime(hist.timestamp, unit="s", utc=True).tz_convert("US/Eastern"),
+        "timestamp": pd.to_datetime(hist.timestamp, unit="s", utc=True).tz_convert("America/New_York"),
         "equity":    hist.equity,
         "pnl":       hist.profit_loss,
         "pnl_pct":   hist.profit_loss_pct,
