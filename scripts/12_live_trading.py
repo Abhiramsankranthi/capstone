@@ -213,52 +213,51 @@ def log_trade(record: dict):
     print(f"  Logged to {TRADE_LOG}")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Pipeline (callable from CLI + Streamlit button) ──────────────────────────
 
-def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--force", action="store_true", help="Override once-per-day guard")
-    args = parser.parse_args()
+def run_pipeline(force: bool = False, submit_alpaca: bool = True,
+                 verbose: bool = True) -> dict:
+    """
+    Run the full live-trading pipeline once.
+
+    Returns a dict with keys:
+        status   : 'ok' | 'skipped' | 'error'
+        message  : human-readable summary
+        record   : the trade_log row written
+        ensemble : full ensemble output (votes + agreement)
+    """
+    _log = print if verbose else (lambda *a, **k: None)
 
     today = date.today().isoformat()
-    print(f"\n=== LIVE TRADING — {today} ===")
+    _log(f"\n=== LIVE TRADING — {today} ===")
 
-    # Guard: skip if already ran today
-    if not args.force and TRADE_LOG.exists():
-        existing = pd.read_csv(TRADE_LOG)
-        already_ran = existing["date"].astype(str).str.startswith(today)
-        if already_ran.any():
-            print(f"  Already traded today ({today}). Use --force to override.")
-            return
+    if not force and TRADE_LOG.exists():
+        try:
+            existing = pd.read_csv(TRADE_LOG, engine="python", on_bad_lines="skip")
+            if existing["date"].astype(str).str.startswith(today).any():
+                msg = f"Already traded today ({today}). Use force=True to override."
+                _log(f"  {msg}")
+                return {"status": "skipped", "message": msg}
+        except Exception:
+            pass
 
     # 1. Features
-    print("\n[1] Computing features...")
-    features_df = fetch_latest_features()
+    features_df    = fetch_latest_features()
     features_today = features_df.iloc[-1]
-    print(f"  Last date: {features_df.index[-1].date()}")
 
     # 2. Regime
-    print("\n[2] Detecting regime...")
     regime = detect_regime(features_today)
-    print(f"  Current regime: {regime}")
+    _log(f"  Regime: {regime}")
 
-    # 3. Ensemble prediction
-    print("\n[3] Running model ensemble...")
-    ens = ensemble_forecast(features_today, regime)
+    # 3. Ensemble
+    ens  = ensemble_forecast(features_today, regime)
     pred = ens["pred"]
-    print(f"  Weighted prediction: {pred:+.5f}  "
-          f"Agreement: {ens['agreement']:.0%}  "
-          f"Active models: {ens['n_active']}/{ens['n_models']}")
-    for v in sorted(ens["votes"], key=lambda x: -x["sharpe"]):
-        flag = "OUT" if v["sharpe"] <= 0 else f"w={v['weight']:.2f}"
-        print(f"    {v['model_key']:48s} sharpe={v['sharpe']:+.3f}  "
-              f"pred={v['pred']:+.5f}  vote={v['vote']:4s}  {flag}")
+    _log(f"  Ensemble pred={pred:+.5f}  agreement={ens['agreement']:.0%}  "
+         f"active={ens['n_active']}/{ens['n_models']}")
 
-    # Persist full consensus for the dashboard
+    # Persist consensus JSON for dashboard
     import json as _json
-    consensus_path = PROCESSED / "latest_consensus.json"
-    consensus_path.write_text(_json.dumps({
+    (PROCESSED / "latest_consensus.json").write_text(_json.dumps({
         "date":      today,
         "regime":    regime,
         "pred":      ens["pred"],
@@ -268,86 +267,73 @@ def main():
         "votes":     ens["votes"],
     }, indent=2, default=float))
 
-    # 4. Position sizing (use ensemble's gated signal, not bare threshold)
+    # 4. Position
     side, notional = compute_target_position(pred, regime,
                                              signal_override=ens["signal"])
-    # Map signal to target symbol: bullish → SPY, bearish → SH (inverse ETF, always buy)
-    target_symbol = SYMBOL_LONG if side == "buy" else (SYMBOL_SHORT if side == "sell" else None)
-    print(f"\n[4] Target position: {side.upper()} "
-          f"${notional:,.0f} of {target_symbol or 'nothing'}")
+    target_symbol = (SYMBOL_LONG if side == "buy"
+                     else SYMBOL_SHORT if side == "sell" else None)
 
-    # 5. Submit order via Alpaca
-    print("\n[5] Submitting order...")
+    # 5. Alpaca order (optional)
     order_result = {"status": "skipped", "order_id": None}
-    try:
-        from src.trading.alpaca_client import (
-            get_account, get_position, submit_order, close_position
-        )
+    if submit_alpaca:
+        try:
+            from src.trading.alpaca_client import (
+                get_position, submit_order, close_position
+            )
 
-        acct = get_account()
-        print(f"  Account equity: ${acct['equity']:,.2f}  Cash: ${acct['cash']:,.2f}")
+            other_symbol = (SYMBOL_SHORT if side == "buy"
+                            else SYMBOL_LONG if side == "sell" else None)
+            if other_symbol and get_position(other_symbol):
+                close_position(other_symbol)
+            if side == "flat":
+                for sym in (SYMBOL_LONG, SYMBOL_SHORT):
+                    if get_position(sym):
+                        close_position(sym)
 
-        pos_spy = get_position(SYMBOL_LONG)
-        pos_sh  = get_position(SYMBOL_SHORT)
-        print(f"  Current SPY: {pos_spy['side'] if pos_spy else 'flat'}   "
-              f"SH: {pos_sh['side'] if pos_sh else 'flat'}")
+            if target_symbol:
+                price = float(yf.Ticker(target_symbol).fast_info["last_price"])
+                qty   = round(notional / price, 2)
+                if qty > 0:
+                    order_result = submit_order(
+                        target_symbol, qty, "buy",
+                        note=f"regime={regime} pred={pred:+.5f} signal={side}"
+                    )
+        except Exception as e:
+            order_result = {"status": f"error: {e}", "order_id": None}
 
-        # Close any position on the OPPOSITE symbol when switching direction / going flat
-        other_symbol = None
-        if side == "buy":   other_symbol = SYMBOL_SHORT   # dump SH when going long SPY
-        elif side == "sell": other_symbol = SYMBOL_LONG    # dump SPY when going bearish
-        if other_symbol and get_position(other_symbol):
-            close_result = close_position(other_symbol)
-            print(f"  Closed {other_symbol}: {close_result}")
-        if side == "flat":
-            for sym in (SYMBOL_LONG, SYMBOL_SHORT):
-                if get_position(sym):
-                    print(f"  Closed {sym}: {close_position(sym)}")
-
-        # Open new position — always a BUY (long SPY or long SH)
-        if target_symbol:
-            price = float(yf.Ticker(target_symbol).fast_info["last_price"])
-            qty = round(notional / price, 2)  # fractional shares OK for buys
-            if qty <= 0:
-                print("  Qty rounds to 0 — skipping order.")
-            else:
-                order_result = submit_order(
-                    target_symbol, qty, "buy",
-                    note=f"regime={regime} pred={pred:+.5f} signal={side}"
-                )
-                print(f"  Order: {order_result}")
-        else:
-            print("  No position taken (flat signal).")
-
-    except ImportError:
-        print("  alpaca-py not installed. Run: pip install alpaca-py")
-        print("  Order NOT submitted — logging signal only.")
-    except Exception as e:
-        print(f"  Alpaca error: {e}")
-        order_result = {"status": f"error: {e}", "order_id": None}
-
-    # 6. Log (add ensemble stats)
-    record_extra = {
-        "agreement":      round(ens["agreement"], 3),
-        "n_active_models": ens["n_active"],
-    }
+    # 6. Log
     record = {
-        "date":       today,
-        "regime":     regime,
-        "pred_return": round(pred, 6),
-        "signal":     side,
-        "symbol":     target_symbol or "",
-        "notional":   notional,
-        "order_id":   order_result.get("order_id"),
-        "order_status": order_result.get("status"),
-        "vix":        float(features_today.get("VIX", np.nan)),
-        "sp500_return": float(features_today.get("sp500_log_return", np.nan)),
-        **record_extra,
+        "date":          today,
+        "regime":        regime,
+        "pred_return":   round(pred, 6),
+        "signal":        side,
+        "symbol":        target_symbol or "",
+        "notional":      notional,
+        "order_id":      order_result.get("order_id"),
+        "order_status":  order_result.get("status"),
+        "vix":           float(features_today.get("VIX", np.nan)),
+        "sp500_return":  float(features_today.get("sp500_log_return", np.nan)),
+        "agreement":     round(ens["agreement"], 3),
+        "n_active_models": ens["n_active"],
     }
     log_trade(record)
 
-    print(f"\n=== DONE: {side.upper()} signal logged ===")
-    print(json.dumps({k: v for k, v in record.items() if k != "order_id"}, indent=2))
+    _log(f"=== DONE: {side.upper()} -> {target_symbol or '-'} ===")
+    return {
+        "status":   "ok",
+        "message":  f"{side.upper()} {target_symbol or ''} — pred {pred:+.3%}, agreement {ens['agreement']:.0%}",
+        "record":   record,
+        "ensemble": ens,
+    }
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--no-submit", action="store_true", help="Skip Alpaca order submission")
+    args = parser.parse_args()
+    run_pipeline(force=args.force, submit_alpaca=not args.no_submit, verbose=True)
 
 
 if __name__ == "__main__":

@@ -592,6 +592,34 @@ elif page == "Live Trading":
     log_df = log_df.sort_values("date")
     latest = log_df.iloc[-1]
 
+    # ── 0. RUN-NOW BUTTON ────────────────────────────────────────────────────
+    ctl1, ctl2 = st.columns([1, 3])
+    with ctl1:
+        run_clicked = st.button("Run Prediction Now", type="primary")
+    with ctl2:
+        submit_order = st.checkbox("Also submit Alpaca order", value=True,
+                                   help="Uncheck to just compute signal without trading")
+
+    if run_clicked:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "live_trading", str(Path(__file__).parent / "scripts" / "12_live_trading.py")
+        )
+        live_mod = importlib.util.module_from_spec(spec)
+        with st.spinner("Fetching data, running 12-model ensemble, placing order..."):
+            try:
+                spec.loader.exec_module(live_mod)
+                result = live_mod.run_pipeline(
+                    force=True, submit_alpaca=submit_order, verbose=False
+                )
+                if result["status"] == "ok":
+                    st.success(f"Signal: {result['message']}")
+                else:
+                    st.warning(result.get("message", "Pipeline returned no action"))
+            except Exception as e:
+                st.error(f"Pipeline failed: {e}")
+        st.rerun()
+
     # ── 1. PREDICTED STATUS (ensemble consensus) ──────────────────────────────
     st.subheader("Predicted Status — Ensemble Model Consensus")
     signal_emoji = {"buy": "BUY SPY", "sell": "BUY SH (inverse)", "flat": "FLAT (no trade)"}
