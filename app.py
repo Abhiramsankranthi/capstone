@@ -623,7 +623,6 @@ elif page == "Live Trading":
     # ── 1. PREDICTED STATUS (ensemble consensus) ──────────────────────────────
     st.subheader("Predicted Status — Ensemble Model Consensus")
     signal_emoji = {"buy": "BUY SPY", "sell": "BUY SH (inverse)", "flat": "FLAT (no trade)"}
-    signal_label = signal_emoji.get(latest["signal"], latest["signal"].upper())
 
     import json
     consensus_path = PROCESSED / "latest_consensus.json"
@@ -634,10 +633,23 @@ elif page == "Live Trading":
         except Exception:
             consensus = None
 
+    # Prefer consensus JSON as single source of truth; fall back to trade log
+    if consensus:
+        disp_date   = consensus["date"]
+        disp_regime = consensus["regime"]
+        disp_pred   = consensus["pred"]
+        disp_signal = consensus["signal"]
+    else:
+        disp_date   = pd.to_datetime(latest["date"]).strftime("%Y-%m-%d")
+        disp_regime = latest["regime"]
+        disp_pred   = latest["pred_return"]
+        disp_signal = latest["signal"]
+    signal_label = signal_emoji.get(disp_signal, str(disp_signal).upper())
+
     p1, p2, p3, p4 = st.columns(4)
-    p1.metric("Signal Date", pd.to_datetime(latest["date"]).strftime("%Y-%m-%d"))
-    p2.metric("Detected Regime", latest["regime"])
-    p3.metric("Ensemble Prediction", f"{latest['pred_return']:+.4%}")
+    p1.metric("Signal Date", disp_date)
+    p2.metric("Detected Regime", disp_regime)
+    p3.metric("Ensemble Prediction", f"{disp_pred:+.4%}")
     p4.metric("Final Signal", signal_label)
 
     if consensus:
